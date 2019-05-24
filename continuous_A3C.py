@@ -1,10 +1,3 @@
-"""
-Reinforcement Learning (A3C) using Pytroch + multiprocessing.
-The most simple implementation for continuous action.
-
-View more on my Chinese tutorial page [莫烦Python](https://morvanzhou.github.io/).
-"""
-
 import torch
 import torch.nn as nn
 from utils import v_wrap, set_init, push_and_pull, record
@@ -20,9 +13,9 @@ GAMMA = 0.9
 MAX_EP = 3000
 MAX_EP_STEP = 200
 
-env = gym.make('Pendulum-v0')
-N_S = env.observation_space.shape[0]
-N_A = env.action_space.shape[0]
+env = gym.make('Pendulum-v0') # Just declared here to obtain the env observation space and action space
+N_S = env.observation_space.shape[0] # State
+N_A = env.action_space.shape[0] # Action
 
 
 class Net(nn.Module):
@@ -74,25 +67,31 @@ class Worker(mp.Process):
         self.g_ep, self.g_ep_r, self.res_queue = global_ep, global_ep_r, res_queue
         self.gnet, self.opt = gnet, opt
         self.lnet = Net(N_S, N_A)           # local network
-        self.env = gym.make('Pendulum-v0').unwrapped
+        self.env = gym.make('Pendulum-v0').unwrapped # Get the env
 
     def run(self):
         total_step = 1
         while self.g_ep.value < MAX_EP:
-            s = self.env.reset()
+            s = self.env.reset() # Reset the env
+
             buffer_s, buffer_a, buffer_r = [], [], []
             ep_r = 0.
             for t in range(MAX_EP_STEP):
                 if self.name == 'w0':
-                    self.env.render()
-                a = self.lnet.choose_action(v_wrap(s[None, :]))
-                s_, r, done, _ = self.env.step(a.clip(-2, 2))
+                    # self.env.render() # Render the gym env for worker 0 only
+                    pass
+
+                a = self.lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
+                s_, r, done, _ = self.env.step(a.clip(-2, 2)) # Perform the action and record the state and rewards
+                # Also take the boolean of whether the sim is done
+
                 if t == MAX_EP_STEP - 1:
                     done = True
                 ep_r += r
-                buffer_a.append(a)
-                buffer_s.append(s)
-                buffer_r.append((r+8.1)/8.1)    # normalize
+                buffer_a.append(a) # Buffer for action
+                buffer_s.append(s) # Buffer for state
+                buffer_r.append((r+8.1)/8.1)    # normalize buffer for reward
+                # TODO: Find out what is 8.1?
 
                 if total_step % UPDATE_GLOBAL_ITER == 0 or done:  # update global and assign to local net
                     # sync
@@ -102,7 +101,7 @@ class Worker(mp.Process):
                     if done:  # done and print information
                         record(self.g_ep, self.g_ep_r, ep_r, self.res_queue, self.name)
                         break
-                s = s_
+                s = s_ # Set current state to the new state caused by action
                 total_step += 1
 
         self.res_queue.put(None)
@@ -110,8 +109,11 @@ class Worker(mp.Process):
 
 if __name__ == "__main__":
     gnet = Net(N_S, N_A)        # global network
+    # gnet.load_state_dict(torch.load("")) # Load the previously trained network
+
     gnet.share_memory()         # share the global parameters in multiprocessing
     opt = SharedAdam(gnet.parameters(), lr=0.0002)  # global optimizer
+    
     global_ep, global_ep_r, res_queue = mp.Value('i', 0), mp.Value('d', 0.), mp.Queue()
 
     # parallel training
@@ -125,6 +127,9 @@ if __name__ == "__main__":
         else:
             break
     [w.join() for w in workers]
+
+    print ("Saving model...")
+    torch.save(gnet.state_dict(), "model.pth")
 
     import matplotlib.pyplot as plt
     plt.plot(res)
