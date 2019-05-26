@@ -6,12 +6,23 @@ import torch.multiprocessing as mp
 from shared_adam import SharedAdam
 import gym
 import math, os
+import argparse
+import matplotlib.pyplot as plt
+
 os.environ["OMP_NUM_THREADS"] = "1"
 
 UPDATE_GLOBAL_ITER = 5
 GAMMA = 0.9
 MAX_EP = 3000
 MAX_EP_STEP = 200
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--test', action='store_true', help='run testing')
+args = parser.parse_args()
+print ("================ args ================")
+print (args)
+print ("======================================")
+
 
 env = gym.make('Pendulum-v0') # Just declared here to obtain the env observation space and action space
 N_S = env.observation_space.shape[0] # State
@@ -78,7 +89,7 @@ class Worker(mp.Process):
             ep_r = 0.
             for t in range(MAX_EP_STEP):
                 if self.name == 'w0':
-                    # self.env.render() # Render the gym env for worker 0 only
+                    self.env.render() # Render the gym env for worker 0 only
                     pass
 
                 a = self.lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
@@ -109,7 +120,9 @@ class Worker(mp.Process):
 
 if __name__ == "__main__":
     gnet = Net(N_S, N_A)        # global network
-    # gnet.load_state_dict(torch.load("")) # Load the previously trained network
+    
+    if args.test:
+        gnet.load_state_dict(torch.load("model.pth")) # Load the previously trained network
 
     gnet.share_memory()         # share the global parameters in multiprocessing
     opt = SharedAdam(gnet.parameters(), lr=0.0002)  # global optimizer
@@ -117,22 +130,26 @@ if __name__ == "__main__":
     global_ep, global_ep_r, res_queue = mp.Value('i', 0), mp.Value('d', 0.), mp.Queue()
 
     # parallel training
-    workers = [Worker(gnet, opt, global_ep, global_ep_r, res_queue, i) for i in range(mp.cpu_count())]
-    [w.start() for w in workers]
-    res = []                    # record episode reward to plot
-    while True:
-        r = res_queue.get()
-        if r is not None:
-            res.append(r)
-        else:
-            break
-    [w.join() for w in workers]
+    if args.test:
+        worker = Worker(gnet, opt, global_ep, global_ep_r, res_queue, 0)
+        worker.start()
 
-    print ("Saving model...")
-    torch.save(gnet.state_dict(), "model.pth")
+    else:
+        workers = [Worker(gnet, opt, global_ep, global_ep_r, res_queue, i) for i in range(mp.cpu_count())]
+        [w.start() for w in workers]
+        res = []                    # record episode reward to plot
+        while True:
+            r = res_queue.get()
+            if r is not None:
+                res.append(r)
+            else:
+                break
+        [w.join() for w in workers]
 
-    import matplotlib.pyplot as plt
-    plt.plot(res)
-    plt.ylabel('Moving average ep reward')
-    plt.xlabel('Step')
-    plt.show()
+        print ("Saving model...")
+        torch.save(gnet.state_dict(), "model.pth")
+
+        plt.plot(res)
+        plt.ylabel('Moving average ep reward')
+        plt.xlabel('Step')
+        plt.show()
