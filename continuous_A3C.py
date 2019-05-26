@@ -86,7 +86,7 @@ class Worker(mp.Process):
             s = self.env.reset() # Reset the env
 
             buffer_s, buffer_a, buffer_r = [], [], []
-            ep_r = 0.
+            ep_r = 0
             for t in range(MAX_EP_STEP):
                 if self.name == 'w0':
                     self.env.render() # Render the gym env for worker 0 only
@@ -118,6 +118,38 @@ class Worker(mp.Process):
         self.res_queue.put(None)
 
 
+def run_test (gnet, opt):
+    lnet = Net(N_S, N_A)           # local network
+    env = gym.make('Pendulum-v0').unwrapped # Get the env
+    s = env.reset() # Reset the env
+
+    buffer_s, buffer_a, buffer_r = [], [], []
+    ep_r = 0
+    total_step = 1
+
+    while True:
+        env.render()
+
+        a = lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
+        s_, r, done, _ = env.step(a.clip(-2, 2)) # Perform the action and record the state and rewards
+        # Also take the boolean of whether the sim is done
+
+        ep_r += r
+        buffer_a.append(a) # Buffer for action
+        buffer_s.append(s) # Buffer for state
+        buffer_r.append((r+8.1)/8.1)    # normalize buffer for reward
+        # TODO: Find out what is 8.1?
+
+        if total_step % UPDATE_GLOBAL_ITER == 0 or done:
+            push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
+            buffer_s, buffer_a, buffer_r = [], [], []
+            if done:
+                print ("SUCCESS", total_step)
+                return
+        s = s_ # Set current state to the new state caused by action
+        total_step += 1
+
+
 if __name__ == "__main__":
     gnet = Net(N_S, N_A)        # global network
     
@@ -131,8 +163,7 @@ if __name__ == "__main__":
 
     # parallel training
     if args.test:
-        worker = Worker(gnet, opt, global_ep, global_ep_r, res_queue, 0)
-        worker.start()
+        run_test(gnet, opt)
 
     else:
         workers = [Worker(gnet, opt, global_ep, global_ep_r, res_queue, i) for i in range(mp.cpu_count())]
