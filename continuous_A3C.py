@@ -8,6 +8,7 @@ import gym
 import math, os
 import argparse
 import matplotlib.pyplot as plt
+from simulation import Simulation
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -22,11 +23,6 @@ args = parser.parse_args()
 print ("================ args ================")
 print (args)
 print ("======================================")
-
-
-env = gym.make('Pendulum-v0') # Just declared here to obtain the env observation space and action space
-N_S = env.observation_space.shape[0] # State
-N_A = env.action_space.shape[0] # Action
 
 
 class Net(nn.Module):
@@ -77,23 +73,23 @@ class Worker(mp.Process):
         self.name = 'w%i' % name
         self.g_ep, self.g_ep_r, self.res_queue = global_ep, global_ep_r, res_queue
         self.gnet, self.opt = gnet, opt
-        self.lnet = Net(N_S, N_A)           # local network
-        self.env = gym.make('Pendulum-v0').unwrapped # Get the env
+        self.sim = Simulation()
+        self.lnet = Net(self.sim.state_space, self.sim.action_space) # local network
 
     def run(self):
         total_step = 1
         while self.g_ep.value < MAX_EP:
-            s = self.env.reset() # Reset the env
+            s = self.sim.reset_env() # Reset the env
 
             buffer_s, buffer_a, buffer_r = [], [], []
             ep_r = 0
             for t in range(MAX_EP_STEP):
                 if self.name == 'w0':
-                    self.env.render() # Render the gym env for worker 0 only
+                    self.sim.show() # Render the gym env for worker 0 only
                     pass
 
                 a = self.lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
-                s_, r, done, _ = self.env.step(a.clip(-2, 2)) # Perform the action and record the state and rewards
+                s_, r, done, _ = self.sim.move(a.clip(-2, 2)) # Perform the action and record the state and rewards
                 # Also take the boolean of whether the sim is done
 
                 if t == MAX_EP_STEP - 1:
@@ -119,19 +115,19 @@ class Worker(mp.Process):
 
 
 def run_test (gnet, opt):
-    lnet = Net(N_S, N_A)           # local network
-    env = gym.make('Pendulum-v0').unwrapped # Get the env
-    s = env.reset() # Reset the env
+    sim = Simulation()
+    lnet = Net(sim.state_space, sim.action_space) # local network    
+    s = sim.reset_env() # Reset the env
 
     buffer_s, buffer_a, buffer_r = [], [], []
     ep_r = 0
     total_step = 1
 
     while True:
-        env.render()
+        sim.show()
 
         a = lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
-        s_, r, done, _ = env.step(a.clip(-2, 2)) # Perform the action and record the state and rewards
+        s_, r, done, _ = sim.move(a.clip(-2, 2)) # Perform the action and record the state and rewards
         # Also take the boolean of whether the sim is done
 
         ep_r += r
@@ -151,7 +147,8 @@ def run_test (gnet, opt):
 
 
 if __name__ == "__main__":
-    gnet = Net(N_S, N_A)        # global network
+    sim = Simulation()
+    gnet = Net(sim.state_space, sim.action_space) # global network
     
     if args.test:
         gnet.load_state_dict(torch.load("model.pth")) # Load the previously trained network
