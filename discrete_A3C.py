@@ -18,6 +18,7 @@ MAX_EP = 3000
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test', action='store_true', help='run testing')
+parser.add_argument('--model_path', type=str, default='models/model_discrete.pth', help='path to the model')
 args = parser.parse_args()
 
 
@@ -139,7 +140,7 @@ if __name__ == "__main__":
     gnet = DiscreteNet(sim.state_space, sim.action_space)        # global network
 
     if args.test:
-        gnet.load_state_dict(torch.load("model_discrete.pth")) # Load the previously trained network
+        gnet.load_state_dict(torch.load(args.model_path)) # Load the previously trained network
     
     gnet.share_memory()         # share the global parameters in multiprocessing
     opt = SharedAdam(gnet.parameters(), lr=0.0001)      # global optimizer
@@ -162,7 +163,7 @@ if __name__ == "__main__":
         [w.join() for w in workers]
 
         print ("Saving model...")
-        torch.save(gnet.state_dict(), "model_discrete.pth")
+        torch.save(gnet.state_dict(), args.model_path)
 
         plt.plot(res)
         plt.ylabel('Moving average ep reward')
