@@ -1,4 +1,5 @@
 import gym
+import numpy as np
 
 class Simulation:
     def __init__ (self):
@@ -25,6 +26,10 @@ class Simulation:
 
 if __name__ == "__main__":
     sim = Simulation()
+    s = sim.reset_env()
     while(1):
+        a = np.array([0.5])
+        s_, r, done, _ = sim.move(a.clip(2, -2))
         sim.show()
+        s = s_
 

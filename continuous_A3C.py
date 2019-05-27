@@ -8,7 +8,7 @@ import gym
 import math, os
 import argparse
 import matplotlib.pyplot as plt
-from simulation import Simulation
+from simulations.pendulum_sim import Simulation
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -66,44 +66,6 @@ class ContinuousNet(nn.Module):
         total_loss = (a_loss + c_loss).mean()
         return total_loss
 
-class DiscreteNet(nn.Module):
-    def __init__(self, s_dim, a_dim):
-        super(DiscreteNet, self).__init__()
-        self.s_dim = s_dim
-        self.a_dim = a_dim
-        self.pi1 = nn.Linear(s_dim, 200)
-        self.pi2 = nn.Linear(200, a_dim)
-        self.v1 = nn.Linear(s_dim, 100)
-        self.v2 = nn.Linear(100, 1)
-        set_init([self.pi1, self.pi2, self.v1, self.v2])
-        self.distribution = torch.distributions.Categorical
-
-    def forward(self, x):
-        pi1 = F.relu6(self.pi1(x))
-        logits = self.pi2(pi1)
-        v1 = F.relu6(self.v1(x))
-        values = self.v2(v1)
-        return logits, values
-
-    def choose_action(self, s):
-        self.eval()
-        logits, _ = self.forward(s)
-        prob = F.softmax(logits, dim=1).data
-        m = self.distribution(prob)
-        return m.sample().numpy()[0]
-
-    def loss_func(self, s, a, v_t):
-        self.train()
-        logits, values = self.forward(s)
-        td = v_t - values
-        c_loss = td.pow(2)
-        
-        probs = F.softmax(logits, dim=1)
-        m = self.distribution(probs)
-        exp_v = m.log_prob(a) * td.detach().squeeze()
-        a_loss = -exp_v
-        total_loss = (c_loss + a_loss).mean()
-        return total_loss
 
 class Worker(mp.Process):
     def __init__(self, gnet, opt, global_ep, global_ep_r, res_queue, name):
@@ -135,7 +97,7 @@ class Worker(mp.Process):
                 ep_r += r
                 buffer_a.append(a) # Buffer for action
                 buffer_s.append(s) # Buffer for state
-                buffer_r.append((r+8.1)/8.1)    # normalize buffer for reward
+                buffer_r.append((r+8.1)/8.1) # normalize buffer for reward
                 # TODO: Find out what is 8.1?
 
                 if total_step % UPDATE_GLOBAL_ITER == 0 or done:  # update global and assign to local net
@@ -189,7 +151,7 @@ if __name__ == "__main__":
     gnet = ContinuousNet(sim.state_space, sim.action_space) # global network
     
     if args.test:
-        gnet.load_state_dict(torch.load("model.pth")) # Load the previously trained network
+        gnet.load_state_dict(torch.load("model_1.pth")) # Load the previously trained network
 
     gnet.share_memory()         # share the global parameters in multiprocessing
     opt = SharedAdam(gnet.parameters(), lr=0.0002)  # global optimizer
@@ -213,7 +175,7 @@ if __name__ == "__main__":
         [w.join() for w in workers]
 
         print ("Saving model...")
-        torch.save(gnet.state_dict(), "model.pth")
+        torch.save(gnet.state_dict(), "model_1.pth")
 
         plt.plot(res)
         plt.ylabel('Moving average ep reward')

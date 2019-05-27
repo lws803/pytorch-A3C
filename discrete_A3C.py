@@ -1,10 +1,3 @@
-"""
-Reinforcement Learning (A3C) using Pytroch + multiprocessing.
-The most simple implementation for continuous action.
-
-View more on my Chinese tutorial page [莫烦Python](https://morvanzhou.github.io/).
-"""
-
 import torch
 import torch.nn as nn
 from utils import v_wrap, set_init, push_and_pull, record
@@ -13,20 +6,24 @@ import torch.multiprocessing as mp
 from shared_adam import SharedAdam
 import gym
 import os
+import argparse
+import matplotlib.pyplot as plt
+from simulations.cartpole_sim import Simulation
+
 os.environ["OMP_NUM_THREADS"] = "1"
 
 UPDATE_GLOBAL_ITER = 10
 GAMMA = 0.9
-MAX_EP = 4000
+MAX_EP = 1500
 
-env = gym.make('CartPole-v0')
-N_S = env.observation_space.shape[0]
-N_A = env.action_space.n
+parser = argparse.ArgumentParser()
+parser.add_argument('--test', action='store_true', help='run testing')
+args = parser.parse_args()
 
 
-class Net(nn.Module):
+class DiscreteNet(nn.Module):
     def __init__(self, s_dim, a_dim):
-        super(Net, self).__init__()
+        super(DiscreteNet, self).__init__()
         self.s_dim = s_dim
         self.a_dim = a_dim
         self.pi1 = nn.Linear(s_dim, 200)
@@ -70,20 +67,20 @@ class Worker(mp.Process):
         self.name = 'w%i' % name
         self.g_ep, self.g_ep_r, self.res_queue = global_ep, global_ep_r, res_queue
         self.gnet, self.opt = gnet, opt
-        self.lnet = Net(N_S, N_A)           # local network
-        self.env = gym.make('CartPole-v0').unwrapped
+        self.env = Simulation()
+        self.lnet = DiscreteNet(self.env.state_space, self.env.action_space) # local network
 
     def run(self):
         total_step = 1
         while self.g_ep.value < MAX_EP:
-            s = self.env.reset()
+            s = self.env.reset_env()
             buffer_s, buffer_a, buffer_r = [], [], []
             ep_r = 0.
             while True:
                 if self.name == 'w0':
-                    self.env.render()
+                    self.env.show()
                 a = self.lnet.choose_action(v_wrap(s[None, :]))
-                s_, r, done, _ = self.env.step(a)
+                s_, r, done, _ = self.env.move(a)
                 if done: r = -1
                 ep_r += r
                 buffer_a.append(a)
@@ -102,27 +99,68 @@ class Worker(mp.Process):
                 total_step += 1
         self.res_queue.put(None)
 
+def run_test (gnet, opt):
+    env = Simulation()
+    lnet = DiscreteNet(env.state_space, env.action_space) # local network    
+    s = env.reset_env() # Reset the env
+
+    buffer_s, buffer_a, buffer_r = [], [], []
+    ep_r = 0
+    total_step = 1
+
+    while True:
+        env.show()
+
+        a = lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
+        s_, r, done, _ = env.move(a) # Perform the action and record the state and rewards
+        # Also take the boolean of whether the sim is done
+
+        ep_r += r
+        buffer_a.append(a) # Buffer for action
+        buffer_s.append(s) # Buffer for state
+        buffer_r.append(r) # Buffer for rewards
+
+        if total_step % UPDATE_GLOBAL_ITER == 0 or done:
+            push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
+            buffer_s, buffer_a, buffer_r = [], [], []
+            if done:
+                print (total_step)
+                return
+        s = s_ # Set current state to the new state caused by action
+        total_step += 1
+
 
 if __name__ == "__main__":
-    gnet = Net(N_S, N_A)        # global network
+    sim = Simulation()
+    gnet = DiscreteNet(sim.state_space, sim.action_space)        # global network
+
+    if args.test:
+        gnet.load_state_dict(torch.load("model_discrete.pth")) # Load the previously trained network
+    
     gnet.share_memory()         # share the global parameters in multiprocessing
     opt = SharedAdam(gnet.parameters(), lr=0.0001)      # global optimizer
     global_ep, global_ep_r, res_queue = mp.Value('i', 0), mp.Value('d', 0.), mp.Queue()
 
-    # parallel training
-    workers = [Worker(gnet, opt, global_ep, global_ep_r, res_queue, i) for i in range(mp.cpu_count())]
-    [w.start() for w in workers]
-    res = []                    # record episode reward to plot
-    while True:
-        r = res_queue.get()
-        if r is not None:
-            res.append(r)
-        else:
-            break
-    [w.join() for w in workers]
+    if args.test:
+        run_test(gnet, opt)
 
-    import matplotlib.pyplot as plt
-    plt.plot(res)
-    plt.ylabel('Moving average ep reward')
-    plt.xlabel('Step')
-    plt.show()
+    else:
+        # parallel training
+        workers = [Worker(gnet, opt, global_ep, global_ep_r, res_queue, i) for i in range(mp.cpu_count())]
+        [w.start() for w in workers]
+        res = []                    # record episode reward to plot
+        while True:
+            r = res_queue.get()
+            if r is not None:
+                res.append(r)
+            else:
+                break
+        [w.join() for w in workers]
+
+        print ("Saving model...")
+        torch.save(gnet.state_dict(), "model_discrete.pth")
+
+        plt.plot(res)
+        plt.ylabel('Moving average ep reward')
+        plt.xlabel('Step')
+        plt.show()
