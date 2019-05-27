@@ -12,9 +12,9 @@ from simulations.cartpole_sim import Simulation
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
-UPDATE_GLOBAL_ITER = 10
+UPDATE_GLOBAL_ITER = 40
 GAMMA = 0.9
-MAX_EP = 20000
+MAX_EP = 3000
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test', action='store_true', help='run testing')
@@ -154,15 +154,12 @@ if __name__ == "__main__":
             r = res_queue.get()
             if r is not None:
                 res.append(r)
-                if r > 1000:
-                    print ("Saving model...")
-                    torch.save(gnet.state_dict(), "model_discrete.pth")
             else:
                 break
         [w.join() for w in workers]
 
-        # print ("Saving model...")
-        # torch.save(gnet.state_dict(), "model_discrete.pth")
+        print ("Saving model...")
+        torch.save(gnet.state_dict(), "model_discrete.pth")
 
         plt.plot(res)
         plt.ylabel('Moving average ep reward')
