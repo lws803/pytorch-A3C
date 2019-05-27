@@ -123,7 +123,7 @@ def run_test (gnet, opt):
 
         if total_step % UPDATE_GLOBAL_ITER == 0 or done:
             # TODO: Test if we really need the feedback training, maybe can remove this
-            # push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
+            push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
             buffer_s, buffer_a, buffer_r = [], [], []
             if done:
                 print (total_step)
