@@ -116,7 +116,7 @@ class Worker(mp.Process):
 
 def run_test (gnet, opt):
     sim = Simulation()
-    lnet = ContinuousNet(sim.state_space, sim.action_space) # local network    
+    lnet = gnet    
     s = sim.reset_env() # Reset the env
 
     buffer_s, buffer_a, buffer_r = [], [], []
@@ -137,7 +137,8 @@ def run_test (gnet, opt):
         # TODO: Find out what is 8.1?
 
         if total_step % UPDATE_GLOBAL_ITER == 0 or done:
-            push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
+            # TODO: Test if we really need the feedback training, maybe can remove this
+            # push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
             buffer_s, buffer_a, buffer_r = [], [], []
             if done:
                 print ("SUCCESS", total_step)
