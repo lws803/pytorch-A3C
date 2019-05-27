@@ -126,7 +126,9 @@ def run_test (gnet, opt):
             buffer_s, buffer_a, buffer_r = [], [], []
             if done:
                 print (total_step)
-                return
+                s = env.reset_env() # Reset the env
+                total_step = 0
+                
         s = s_ # Set current state to the new state caused by action
         total_step += 1
 
