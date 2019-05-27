@@ -14,7 +14,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 UPDATE_GLOBAL_ITER = 10
 GAMMA = 0.9
-MAX_EP = 1500
+MAX_EP = 2000
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test', action='store_true', help='run testing')
