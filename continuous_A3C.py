@@ -87,7 +87,7 @@ class Worker(mp.Process):
             ep_r = 0
             for t in range(MAX_EP_STEP):
                 if self.name == 'w0':
-                    self.sim.show() # Render the gym env for worker 0 only
+                    # self.sim.show() # Render the gym env for worker 0 only
                     pass
 
                 a = self.lnet.choose_action(v_wrap(s[None, :])) # Choose next action to perform, left or right by what magnitude
