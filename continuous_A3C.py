@@ -16,6 +16,7 @@ UPDATE_GLOBAL_ITER = 5
 GAMMA = 0.9
 MAX_EP = 3000
 MAX_EP_STEP = 100
+NORMALISE = 8.1 # TODO: Find out why normalise by 8.1
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test', action='store_true', help='run testing')
@@ -98,8 +99,7 @@ class Worker(mp.Process):
                 ep_r += r
                 buffer_a.append(a) # Buffer for action
                 buffer_s.append(s) # Buffer for state
-                buffer_r.append((r+8.1)/8.1) # normalize buffer for reward
-                # TODO: Find out what is 8.1?
+                buffer_r.append((r+NORMALISE)/NORMALISE) # normalize buffer for reward
 
                 if total_step % UPDATE_GLOBAL_ITER == 0 or done:  # update global and assign to local net
                     # sync
@@ -134,11 +134,9 @@ def run_test (gnet, opt):
         ep_r += r
         buffer_a.append(a) # Buffer for action
         buffer_s.append(s) # Buffer for state
-        buffer_r.append((r+8.1)/8.1)    # normalize buffer for reward
-        # TODO: Find out what is 8.1?
+        buffer_r.append((r+NORMALISE)/NORMALISE)    # normalize buffer for reward
 
         if total_step % UPDATE_GLOBAL_ITER == 0 or done:
-            # TODO: Test if we really need the feedback training, maybe can remove this
             push_and_pull(opt, lnet, gnet, done, s_, buffer_s, buffer_a, buffer_r, GAMMA)
             buffer_s, buffer_a, buffer_r = [], [], []
             if done:
